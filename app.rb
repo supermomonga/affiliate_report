@@ -12,6 +12,7 @@ class App < Thor
     @a = Mechanize.new
     @a.verify_mode = OpenSSL::SSL::VERIFY_NONE
     @asps = [:imobile, :addeluxe]
+    @asps = [:imobile]
     super
   end
 
@@ -56,7 +57,7 @@ class App < Thor
     b.wait
     b.goto "https://sppartner.i-mobile.co.jp/report_detail.aspx?reportGroup=1&tsp=1&span=0&begin=%s&end=%s" % [ term.first.strftime("%Y-%m-%d"), term.last.strftime("%Y-%m-%d") ]
     b.wait
-    fee = b.table(:class, 'List').to_a.reverse[1].last.tr('￥','').to_i
+    fee = b.table(:class, 'List').to_a.reverse[1].last.tr('￥,','').to_i
     b.close
     Report.new 'i-mobile', term, fee
   end
@@ -76,7 +77,7 @@ class App < Thor
       date = row.at('td')
       date && term.include?(Date.parse(date.text))
     }.inject(0){|acc, row|
-      acc + row.search('td')[3].text.tr('¥','').to_i
+      acc + row.search('td')[3].text.tr('¥,','').to_i
     }
     Report.new 'AdDeluxe', term, fee
   end
