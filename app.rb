@@ -12,8 +12,14 @@ class App < Thor
     @a = Mechanize.new
     @a.verify_mode = OpenSSL::SSL::VERIFY_NONE
     @asps = [:imobile, :addeluxe]
-    @asps = [:imobile]
+    @asps = [:imobile, :maist]
     super
+  end
+
+  desc 'w', "Show weekly report"
+  def w
+    today = DateTime.now.to_date
+    print_reports (today - 7)..today
   end
 
   desc 'y', "Show yesterday's report"
@@ -30,11 +36,14 @@ class App < Thor
 
   private
   def print_reports term
-    reports = @asps.select{|asp|
+    reports = []
+    threads = []
+    @asps.select{|asp|
       ENV['ASP_ID_' + asp.to_s.upcase] && ENV['ASP_PW_' + asp.to_s.upcase]
-    }.map{|asp|
-      method(asp).call ENV['ASP_ID_' + asp.to_s.upcase], ENV['ASP_PW_' + asp.to_s.upcase], term
+    }.each{|asp|
+      reports.push method(asp).call ENV['ASP_ID_' + asp.to_s.upcase], ENV['ASP_PW_' + asp.to_s.upcase], term
     }
+    # threads.map(&:join)
     reports.push Report.new 'Total', term, reports.map(&:fee).inject(&:+)
     reports.each do |report|
       puts report
@@ -45,9 +54,11 @@ class App < Thor
     caps['chromeOptions'] = {prefs: { webkit: { webprefs: { loads_images_automatically: false} } } }
     b = Watir::Browser.new :chrome, desired_capabilities: caps
     b.driver.manage.window.resize_to(0,0)
+    # b.driver.manage.window.resize_to(1000,1000)
     b.driver.manage.window.move_to(0,0)
     b
   end
+
   def imobile id, pw, term
     b = new_browser
     b.goto 'https://sppartner.i-mobile.co.jp/login.aspx'
@@ -60,6 +71,24 @@ class App < Thor
     fee = b.table(:class, 'List').to_a.reverse[1].last.tr('￥,','').to_i
     b.close
     Report.new 'i-mobile', term, fee
+  end
+
+  def maist id, pw, term
+    b = new_browser
+    b.goto 'https://maist.jp/report/index.php'
+    b.text_field(:name, 'login_id1').value = id
+    elm = b.text_field(:name, 'password1')
+    script = "return arguments[0].value = '#{pw}'"
+    b.execute_script(script, elm)
+    b.button(:onclick, 'do_login(2);').click
+    b.wait
+    b.text_field(:name, 'from_date').value = term.first.strftime("%Y-%m-%d")
+    b.text_field(:name, 'to_date').value = term.last.strftime("%Y-%m-%d")
+    b.button(:value, '検索').click
+    b.wait
+    fee = b.table(:class, 'tbl').to_a.last.last.tr('￥,','').to_i
+    b.close
+    Report.new 'maist', term, fee
   end
 
   def addeluxe id, pw, term
